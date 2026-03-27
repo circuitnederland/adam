@@ -3,7 +3,15 @@ import static groovy.transform.TypeCheckingMode.SKIP
 import groovy.transform.TypeChecked
 import javax.mail.internet.InternetAddress
 import org.apache.commons.validator.routines.checkdigit.IBANCheckDigit
+import org.cyclos.entities.users.SystemRecord
 import org.cyclos.entities.users.SystemRecordType
+import org.cyclos.impl.users.RecordServiceLocal
+import org.cyclos.model.system.fields.CustomFieldPossibleValueVO
+import org.cyclos.model.system.fields.CustomFieldValueForSearchDTO
+import org.cyclos.model.system.fields.CustomFieldVO
+import org.cyclos.model.users.records.SystemRecordQuery
+import org.cyclos.model.users.recordtypes.RecordTypeVO
+import org.cyclos.server.utils.LocaleHelper
 import org.cyclos.server.utils.MessageProcessingHelper
 import org.springframework.mail.javamail.MimeMessageHelper
 
@@ -130,18 +138,41 @@ class Utils {
     /**
      * Returns the contents of the system record field with the given recordtype and code.
      * If the field does not exist, returns the scriptParameter with the given code or the code itself.
+     * If an optional recordIdentifier arg is passed, search for the record with this identifier custom field.
+     * This is used for multi recordtypes. If no recordIdentifier arg is passed, use the single form record type.
      */
     @TypeChecked(SKIP)
-    private Object _getRecordData(String recordTypeInternalName, String code) {
-        // Only look up the record data if we have not done that already.
-        if (!recordData[recordTypeInternalName]) {
-            def recordType = binding.entityManagerHandler.find(SystemRecordType, recordTypeInternalName)
-            def record = binding.recordService.getSingleFormRecord(recordType)
-            recordData[recordTypeInternalName] = binding.scriptHelper.wrap(record)
+    private Object _getRecordData(String recordTypeInternalName, String code, String recordIdentifier = null) {
+        // Determine the key for the recordData Map.
+        String key = recordTypeInternalName + (recordIdentifier ? "_${recordIdentifier}" : '')
+        if (!recordData[key]) {
+            RecordServiceLocal recordService = binding.recordService as RecordServiceLocal
+            if (recordIdentifier) {
+                // Look up the record for list recordtype, using the recordtype internal name and the record identifier custom field.
+                def query = new SystemRecordQuery()
+                query.type = new RecordTypeVO(internalName: recordTypeInternalName)
+                query.customValues = [
+                    new CustomFieldValueForSearchDTO(
+                        field: new CustomFieldVO(internalName: "${recordTypeInternalName}.identifier"),
+                        enumeratedValues: [
+                            new CustomFieldPossibleValueVO(internalName: recordIdentifier)
+                        ]
+                    )
+                ] as Set
+                query.setPageSize(1) // Since the result is by default ordered by creation date, this gives us the newest record.
+                def results = recordService.search(query).pageItems
+                def record = results.isEmpty() ? null : binding.entityManagerHandler.find(SystemRecord, results[0].id)
+                recordData[key] = binding.scriptHelper.wrap(record)
+            } else {
+                // Look up the record for single form recordtype, using only the recordtype internalName.
+                def recordType = binding.entityManagerHandler.find(SystemRecordType, recordTypeInternalName)
+                def record = recordService.getSingleFormRecord(recordType)
+                recordData[key] = binding.scriptHelper.wrap(record)
+            }
         }
         // If the field exists, return its value. Use containsKey(), because a boolean field value might be Groovy-false.
-        if ( recordData[recordTypeInternalName].containsKey(code) ) {
-            return recordData[recordTypeInternalName][code]
+        if ( recordData[key].containsKey(code) ) {
+            return recordData[key][code]
         }
         // The field was not found, return either a scriptParameter with the same name, or the code itself.
         return binding.scriptParameters[code] ?: code
@@ -149,11 +180,20 @@ class Utils {
 
     /**
      * Returns a text message with any placeholders replaced by the dynamic texts in the given vars Map.
-     * The text message is taken from either the textMessages system record or the scriptParameters.
+     * The text message is taken from either the customTexts system record or the scriptParameters.
      * If neither exists, the code itself is returned.
+     * No type check, because the binding variables are unknown.
      */
+    @TypeChecked(SKIP)
     String dynamicMessage(String code, Map<String, Object> vars = null) {
-        String messageHolder = (String) _getRecordData('textMessages', code)
+        // Use the current active language of the user, if there is one.
+        String lng = binding.sessionData.loggedUser?.locale
+        if (!lng) {
+            // If there is none, use the default language of the active configuration, with fallback to Dutch.
+            def defaultConfLng = binding.sessionData.configuration?.defaultLanguage?.template
+            lng = defaultConfLng ? LocaleHelper.mapLocale(defaultConfLng) : 'nl'
+        }
+        String messageHolder = (String) _getRecordData('customTexts', code, lng)
         if (!vars) {
             return messageHolder
         }
