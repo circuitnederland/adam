@@ -1,7 +1,7 @@
 import static groovy.transform.TypeCheckingMode.SKIP
 
 import groovy.transform.TypeChecked
-import javax.mail.internet.InternetAddress
+import jakarta.mail.internet.InternetAddress
 import org.apache.commons.validator.routines.checkdigit.IBANCheckDigit
 import org.cyclos.entities.users.SystemRecord
 import org.cyclos.entities.users.SystemRecordType
