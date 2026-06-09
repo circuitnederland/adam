@@ -23,6 +23,11 @@ if (result.wizard?.internalName != 'registration') {
     return
 }
 
+// Only intercept if the wizard has not finished yet.
+if (result.registrationResult) {
+    return
+}
+
 // Skip Information texts that already have text.
 if (result.step?.informationText) {
     // Empty Information texts that were marked as such.
