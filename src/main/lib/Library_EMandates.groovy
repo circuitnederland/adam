@@ -6,8 +6,6 @@ import org.apache.commons.lang3.mutable.MutableInt
 import org.cyclos.entities.system.CustomField
 import org.cyclos.entities.system.CustomFieldPossibleValue
 import org.cyclos.entities.system.CustomOperationField
-import org.cyclos.entities.system.CustomWizardExecution
-import org.cyclos.entities.system.CustomWizardField
 import org.cyclos.entities.system.ExternalRedirectExecution
 import org.cyclos.entities.users.QRecordCustomFieldPossibleValue
 import org.cyclos.entities.users.RecordCustomFieldPossibleValue
@@ -24,9 +22,6 @@ import org.cyclos.impl.system.BaseCustomFieldPossibleValueServiceLocal
 import org.cyclos.impl.system.ConfigurationAccessor
 import org.cyclos.impl.system.CustomOperationFieldPossibleValueCategoryServiceLocal
 import org.cyclos.impl.system.CustomOperationFieldPossibleValueServiceLocal
-import org.cyclos.impl.system.CustomWizardExecutionStorage
-import org.cyclos.impl.system.CustomWizardFieldPossibleValueCategoryServiceLocal
-import org.cyclos.impl.system.CustomWizardFieldPossibleValueServiceLocal
 import org.cyclos.impl.system.ScriptHelper
 import org.cyclos.impl.users.RecordServiceLocal
 import org.cyclos.impl.users.UserServiceLocal
@@ -79,8 +74,6 @@ class EMandates {
 	FormatterImpl formatter
 	ServletContext servletContext
 	EntityManagerHandler entityManagerHandler
-	CustomWizardFieldPossibleValueServiceLocal wizardPossibleValueService
-	CustomWizardFieldPossibleValueCategoryServiceLocal wizardPossibleValueCategoryService
 	CustomOperationFieldPossibleValueServiceLocal operationPossibleValueService
 	CustomOperationFieldPossibleValueCategoryServiceLocal operationPossibleValueCategoryService
 	LinkGeneratorHandler linkGeneratorHandler
@@ -98,8 +91,6 @@ class EMandates {
 		formatter = vars.formatter as FormatterImpl
 		objectMapper = vars.objectMapper as ObjectMapper
 		entityManagerHandler = vars.entityManagerHandler as EntityManagerHandler
-		wizardPossibleValueService = vars.customWizardFieldPossibleValueService as CustomWizardFieldPossibleValueServiceLocal
-		wizardPossibleValueCategoryService = vars.customWizardFieldPossibleValueCategoryService as CustomWizardFieldPossibleValueCategoryServiceLocal
 		operationPossibleValueService = vars.customOperationFieldPossibleValueService as CustomOperationFieldPossibleValueServiceLocal
 		operationPossibleValueCategoryService = vars.customOperationFieldPossibleValueCategoryService as CustomOperationFieldPossibleValueCategoryServiceLocal
 		linkGeneratorHandler = vars.linkGeneratorHandler as LinkGeneratorHandler
@@ -160,14 +151,6 @@ class EMandates {
 		
 		// Get the banks and countries
 		def banks = dir.debtorBanks
-		
-		// Update the wizard custom fields
-		def wizardFields = [
-			'registration.debtorBank'
-		].collect { entityManagerHandler.find(CustomWizardField, it) }
-		.each { field ->
-			updateDebtorBanks(field, banks, wizardPossibleValueService, wizardPossibleValueCategoryService)
-		}
 		
 		// Update the operation custom fields		
 		def operationFields = [
@@ -245,7 +228,7 @@ class EMandates {
 	}
 	
 	/**
-	 * Request of a new mandate. Can be called either from the custom operation or registration wizard. 
+	 * Request of a new mandate. Called from the custom operation.
 	 * Returns the URL to which the user should be redirected.
 	 */
 	String newMandateRequest(User user, String entranceCode, String debtorReference,
@@ -353,11 +336,6 @@ class EMandates {
 			def id = Long.valueOf(StringHelper.removeStart(entranceCode, "operation"))
 			def execution = entityManagerHandler.find(ExternalRedirectExecution, id)			
 			url = linkGeneratorHandler.customOperationExternalRedirect(execution)
-		} else if (entranceCode.startsWith("wizard")) {
-			def id = Long.valueOf(StringHelper.removeStart(entranceCode, "wizard"))
-			def execution = entityManagerHandler.find(CustomWizardExecution, id)
-			def executionStorage = conversionHandler.convert(CustomWizardExecutionStorage, execution.storage)
-			url = linkGeneratorHandler.customWizardExternalRedirect(execution, executionStorage)
 		} else {
 			throw new IllegalStateException("Unhandled entranceCode: ${entranceCode}")
 		}
@@ -425,51 +403,7 @@ class EMandates {
 		}
 		fields.rawMessage = resp.rawMessage
 
-		// Update the user profile.
-		updateUserIBAN(fields)
-
 		return fields
-	}
-
-	/**
-	 * Store the IBAN from the eMandate in the user profile.
-	 * Note: in case we come here in the context of the registration wizard, there is no user yet and we simply don't do anything.
-	 */
-	void updateUserIBAN(Map fields) {
-		String status = (fields.status as CustomFieldPossibleValue).internalName
-		if ('success' != status || fields.owner == null || !fields.owner instanceof User) {
-			// The eMandate does not have a success status, or the owner is not known yet or not a user object, don't try to update the IBAN and just return.
-			return
-		}
-
-		def usrDTO = userService.load((fields.owner as User).id)
-		def usr = scriptHelper.wrap(usrDTO)
-		def orgIban = usr.iban
-		Utils utils = new Utils(binding)
-		if (utils.isIbansEqual(orgIban as String, fields.iban as String)) {
-			// The IBAN in the eMandate record is the same as the IBAN we already had for this user, there is nothing more to do.
-			return
-		}
-
-		// The IBAN in the eMandate is different than the IBAN we have in the user profile.
-
-		// First, inform our financial admin by mail.
-		def vars = ['username': usr.username, 'iban_emandate': fields.iban, 'org_iban': orgIban]
-		utils.sendMailToAdmin("Incassomachtiging van afwijkend iban", utils.dynamicMessage("emDifferentIBAN", vars), true)
-
-		// Next, try to update the IBAN in the user profile.
-		try{
-			usr.iban = fields.iban
-			userService.save(usrDTO)
-		} catch (ValidationException vE) {
-			// We could not update the user profile, maybe the IBAN from equens already exists on another user in our system,
-			// or the user has an invalid profile (missing required field for example). Put the original IBAN back and inform the finadmin.
-			// Don't use the userService to change the user profile field, because this may fail due to the validation problem.
-			usr = scriptHelper.wrap((fields.owner as User))
-			usr.iban = orgIban
-			vars = ['username': usr.username, 'error': vE.validation?.firstError]
-			utils.sendMailToAdmin("Fout tijdens afgifte incassomachtiging", utils.dynamicMessage("emErrorSaveIBAN", vars), true)
-		}
 	}
 
 	/**
@@ -588,56 +522,56 @@ class EMandates {
 		return msg
 	}
 
-	/**
-	 * Builds up an HTML string containing relevant details from the given emandate record.
-	 */
-	String emandateHtml(SystemRecord record, User user) {
-		if ( ! record ) {
-			return ''
-		}
-		def fields = scriptHelper.wrap(record)
-		def config = configurationHandler.getAccessor(user)
-		def html = ''
+	// /**
+	//  * Builds up an HTML string containing relevant details from the given emandate record.
+	//  */
+	// String emandateHtml(SystemRecord record, User user) {
+	// 	if ( ! record ) {
+	// 		return ''
+	// 	}
+	// 	def fields = scriptHelper.wrap(record)
+	// 	def config = configurationHandler.getAccessor(user)
+	// 	def html = ''
 
-		def bankName = fields.bankName
-		def bankNameField = record.type.fields.find { it.internalName == 'bankName' }
-		def bankNameLabel = dataTranslationHandler.getName(config.language, bankNameField)
-		html += "<div><strong>${bankNameLabel}:</strong> ${bankName}</div>"
+	// 	def bankName = fields.bankName
+	// 	def bankNameField = record.type.fields.find { it.internalName == 'bankName' }
+	// 	def bankNameLabel = dataTranslationHandler.getName(config.language, bankNameField)
+	// 	html += "<div><strong>${bankNameLabel}:</strong> ${bankName}</div>"
 
-		def iban = fields.iban
-		if (iban) {		
-			def ibanField = record.type.fields.find { it.internalName == 'iban' }
-			def ibanLabel = dataTranslationHandler.getName(config.language, ibanField)
-			html += "<div><strong>${ibanLabel}:</strong> ${iban}</div>"
-		}
+	// 	def iban = fields.iban
+	// 	if (iban) {		
+	// 		def ibanField = record.type.fields.find { it.internalName == 'iban' }
+	// 		def ibanLabel = dataTranslationHandler.getName(config.language, ibanField)
+	// 		html += "<div><strong>${ibanLabel}:</strong> ${iban}</div>"
+	// 	}
 
-		def accountName = fields.accountName
-		if (accountName) {
-			def accountNameField = record.type.fields.find { it.internalName == 'accountName' }
-			def accountNameLabel = dataTranslationHandler.getName(config.language, accountNameField)
-			html += "<div><strong>${accountNameLabel}:</strong> ${accountName}</div>"
-		}
+	// 	def accountName = fields.accountName
+	// 	if (accountName) {
+	// 		def accountNameField = record.type.fields.find { it.internalName == 'accountName' }
+	// 		def accountNameLabel = dataTranslationHandler.getName(config.language, accountNameField)
+	// 		html += "<div><strong>${accountNameLabel}:</strong> ${accountName}</div>"
+	// 	}
 
-		def signerName = fields.signerName
-		if (signerName) {
-			def signerNameField = record.type.fields.find { it.internalName == 'signerName' }
-			def signerNameLabel = dataTranslationHandler.getName(config.language, signerNameField)
-			html += "<div><strong>${signerNameLabel}:</strong> ${signerName}</div>"
-		}
+	// 	def signerName = fields.signerName
+	// 	if (signerName) {
+	// 		def signerNameField = record.type.fields.find { it.internalName == 'signerName' }
+	// 		def signerNameLabel = dataTranslationHandler.getName(config.language, signerNameField)
+	// 		html += "<div><strong>${signerNameLabel}:</strong> ${signerName}</div>"
+	// 	}
 
-		def statusField = record.type.fields.find { it.internalName == 'status' }
-		def statusLabel = dataTranslationHandler.getName(config.language, statusField)
-		RecordCustomFieldPossibleValue statusValue = fields.status as RecordCustomFieldPossibleValue
-		def pv = QRecordCustomFieldPossibleValue.recordCustomFieldPossibleValue
-		def statusValueLabel = dataTranslationHandler.getValue(config.language, statusValue, pv.value)
-		html += "<div><strong>${statusLabel}:</strong> ${statusValueLabel}</div>"
+	// 	def statusField = record.type.fields.find { it.internalName == 'status' }
+	// 	def statusLabel = dataTranslationHandler.getName(config.language, statusField)
+	// 	RecordCustomFieldPossibleValue statusValue = fields.status as RecordCustomFieldPossibleValue
+	// 	def pv = QRecordCustomFieldPossibleValue.recordCustomFieldPossibleValue
+	// 	def statusValueLabel = dataTranslationHandler.getValue(config.language, statusValue, pv.value)
+	// 	html += "<div><strong>${statusLabel}:</strong> ${statusValueLabel}</div>"
 		
-		def statusDate = fields.statusDate
-		if (statusDate) {
-			def statusDateField = record.type.fields.find { it.internalName == 'statusDate' }
-			def statusDateLabel = dataTranslationHandler.getName(config.language, statusDateField)
-			html += "<div><strong>${statusDateLabel}:</strong> ${formatter.format(statusDate)}</div>"
-		}
-		return html
-	}
+	// 	def statusDate = fields.statusDate
+	// 	if (statusDate) {
+	// 		def statusDateField = record.type.fields.find { it.internalName == 'statusDate' }
+	// 		def statusDateLabel = dataTranslationHandler.getName(config.language, statusDateField)
+	// 		html += "<div><strong>${statusDateLabel}:</strong> ${formatter.format(statusDate)}</div>"
+	// 	}
+	// 	return html
+	// }
 }
