@@ -9,8 +9,7 @@ import org.cyclos.entities.system.CustomOperationField
 import org.cyclos.entities.system.ExternalRedirectExecution
 import org.cyclos.entities.users.QRecordCustomFieldPossibleValue
 import org.cyclos.entities.users.RecordCustomFieldPossibleValue
-import org.cyclos.entities.users.SystemRecord
-import org.cyclos.entities.users.SystemRecordType
+import org.cyclos.entities.users.UserRecord
 import org.cyclos.entities.users.User
 import org.cyclos.entities.utils.DatePeriod
 import org.cyclos.entities.utils.EntityBackedParameterStorage
@@ -24,7 +23,6 @@ import org.cyclos.impl.system.CustomOperationFieldPossibleValueCategoryServiceLo
 import org.cyclos.impl.system.CustomOperationFieldPossibleValueServiceLocal
 import org.cyclos.impl.system.ScriptHelper
 import org.cyclos.impl.users.RecordServiceLocal
-import org.cyclos.impl.users.UserServiceLocal
 import org.cyclos.impl.utils.conversion.ConversionHandler
 import org.cyclos.impl.utils.LinkGeneratorHandler
 import org.cyclos.impl.utils.formatting.FormatterImpl
@@ -36,10 +34,11 @@ import org.cyclos.model.system.fields.CustomFieldPossibleValueDTO
 import org.cyclos.model.system.fields.CustomFieldPossibleValueVO
 import org.cyclos.model.system.fields.CustomFieldVO
 import org.cyclos.model.system.fields.CustomFieldValueForSearchDTO
-import org.cyclos.model.system.fields.LinkedEntityVO
 import org.cyclos.model.users.records.RecordDataParams
-import org.cyclos.model.users.records.SystemRecordQuery
+import org.cyclos.model.users.records.UserRecordQuery
 import org.cyclos.model.users.recordtypes.RecordTypeVO
+import org.cyclos.model.users.users.UserLocatorVO
+import org.cyclos.model.users.users.UserVO
 import org.cyclos.model.utils.DatePeriodDTO
 import org.cyclos.model.utils.ResponseInfo
 import org.cyclos.model.utils.TimeField
@@ -78,7 +77,6 @@ class EMandates {
 	CustomOperationFieldPossibleValueCategoryServiceLocal operationPossibleValueCategoryService
 	LinkGeneratorHandler linkGeneratorHandler
 	RecordServiceLocal recordService
-	UserServiceLocal userService
 	CoreCommunicator coreComm
 	
 	EMandates(Binding binding) {
@@ -95,7 +93,6 @@ class EMandates {
 		operationPossibleValueCategoryService = vars.customOperationFieldPossibleValueCategoryService as CustomOperationFieldPossibleValueCategoryServiceLocal
 		linkGeneratorHandler = vars.linkGeneratorHandler as LinkGeneratorHandler
 		recordService = vars.recordService as RecordServiceLocal
-		userService = vars.userService as UserServiceLocal
 		
 		servletContext = scriptHelper.bean(ServletContext)
 		coreComm = servletContext.getAttribute(CORE_COMM) as CoreCommunicator
@@ -154,8 +151,9 @@ class EMandates {
 		
 		// Update the operation custom fields		
 		def operationFields = [
-			'createEMandate.debtorBank', 
-			'amendEMandate.debtorBank'
+			'createEMandateEntrance.debtorBank',
+			'createEMandateBankInfo.debtorBank',
+			'amendEMandateBankInfo.debtorBank'
 		].collect { entityManagerHandler.find(CustomOperationField, it) }
 		.each { field ->
 			updateDebtorBanks(field, banks, operationPossibleValueService, operationPossibleValueCategoryService)
@@ -218,7 +216,7 @@ class EMandates {
 	 */
 	String bankName(String bankId) {
 		def field = entityManagerHandler.find(
-			CustomOperationField.class, 'createEMandate.debtorBank')
+			CustomOperationField.class, 'createEMandateBankInfo.debtorBank')
 		def internalName = bankIdToInternalName(bankId) 
 		return field.possibleValues.stream()
 			.filter { it.internalName == internalName }
@@ -231,28 +229,28 @@ class EMandates {
 	 * Request of a new mandate. Called from the custom operation.
 	 * Returns the URL to which the user should be redirected.
 	 */
-	String newMandateRequest(User user, String entranceCode, String debtorReference,
-		ObjectParameterStorage storage, String bankId) {
+	String newMandateRequest(User user, ExternalRedirectExecution execution, String bankId) {
 		// First create the record
 		def data = recordService.getDataForNew(new RecordDataParams(
+            user: new UserLocatorVO(id: user.id),
 			recordType: new RecordTypeVO(internalName: 'eMandate')))
 		def fields = scriptHelper.wrap(data.dto)
 		fields.bankId = bankId
 		fields.bankName = bankName(bankId)
-		fields.owner = user
 		def record = recordService.saveEntity(data.dto)
 
 		// Store the record in the storage, so we can lookup it later
+		def storage = new EntityBackedParameterStorage(objectMapper, execution)
 		storage.setObject('record', record)
 		
 		// Build the request parameters
 		def req = new NewMandateRequest(
-			entranceCode,
+			"operation${execution.id}",
 			'nl', // Language 
 			null, // Use the default duration 
 			record.id as String, // The eMandate id is the record id
 			new Utils(binding).dynamicMessage('emDescription'), 
-			debtorReference,
+			user.username as String, // The debtor reference is the username
 			bankId, // The debtor bank id
 			record.id as String, // The purchase id is the record id
 			SequenceType.RCUR, // We always request for recurring mandates 
@@ -275,8 +273,22 @@ class EMandates {
 	 * Request of a mandate amend. Returns the URL to which the user should be redirected.
 	 */
 	String amendMandateRequest(User user, ExternalRedirectExecution execution, String bankId) {
-		// Find the current record. We need some data from it for the amend request.
-		def curRecord = current(user)
+		// Find the most recent succesful emandate record for the given user. We need some data from it for the amend request.
+		def query = new UserRecordQuery()
+		query.type = new RecordTypeVO(internalName: 'eMandate')
+        query.user = new UserVO(user.id)
+		query.customValues = [
+			new CustomFieldValueForSearchDTO(
+				field: new CustomFieldVO(internalName: 'eMandate.status'),
+				enumeratedValues: [
+					new CustomFieldPossibleValueVO(internalName: 'success')
+				] as Set
+			)
+		] as Set
+		query.setSkipTotalCount(true)
+		query.setPageSize(1)
+		def results = this.recordService.search(query).pageItems
+		def curRecord = results.isEmpty() ? null : this.entityManagerHandler.find(UserRecord, results[0].id)
 		if (curRecord == null) {
 			throw new ValidationException("No current eMandate")
 		}
@@ -284,11 +296,11 @@ class EMandates {
 		
 		// Create a new record.
 		def data = recordService.getDataForNew(new RecordDataParams(
+			user: new UserLocatorVO(id: user.id),
 			recordType: new RecordTypeVO(internalName: 'eMandate')))
 		def newFields = scriptHelper.wrap(data.dto)
 		newFields.bankId = bankId
 		newFields.bankName = bankName(bankId)
-		newFields.owner = user
 		def newRecord = recordService.saveEntity(data.dto)
 
 		// Build the request parameters
@@ -349,8 +361,9 @@ class EMandates {
 	 * This is the callback by the proper custom operation.
 	 * It will check the status of the transaction
 	 */
-	Map<String, Object> callback(ObjectParameterStorage storage, String transactionId) {
-		def record = storage.getObject('record') as SystemRecord
+	Map<String, Object> callback(ExternalRedirectExecution execution, String transactionId) {
+		def storage = new EntityBackedParameterStorage(objectMapper, execution)
+		def record = storage.getObject('record') as UserRecord
 		def fields = scriptHelper.wrap(record)
 		if (fields.transactionId != transactionId) {
 			throw new ValidationException("Invalid transactionId")
@@ -376,8 +389,9 @@ class EMandates {
 	/**
 	 * Calls the web service to update the eMandate status for the given record
 	 */
-	Map<String, Object> updateStatus(SystemRecord record) {
-		def fields = scriptHelper.wrap(record)
+	Map<String, Object> updateStatus(UserRecord record) {
+		def recordDTO = recordService.load(record.id)
+		def fields = scriptHelper.wrap(recordDTO)
 		
 		// Only proceed if the status is either open or pending
 		def currentStatus = (fields.status as CustomFieldPossibleValue).internalName
@@ -402,41 +416,35 @@ class EMandates {
 			fields.statusDate = resp.statusDateTimestamp.toGregorianCalendar().time
 		}
 		fields.rawMessage = resp.rawMessage
+		recordService.save(recordDTO)
 
 		return fields
 	}
 
 	/**
-	 * Returns the current eMandate record for the given user
+	 * Returns the newest eMandate record for the given user
 	 */
-	SystemRecord current(User user) {
-		def query = new SystemRecordQuery()
+	UserRecord newest(User user) {
+		def query = new UserRecordQuery()
 		query.type = new RecordTypeVO(internalName: 'eMandate')
-		query.customValues = [
-			new CustomFieldValueForSearchDTO(
-				field: new CustomFieldVO(internalName: 'owner'),
-				linkedEntityValues: [
-					new LinkedEntityVO(user.id)
-				] as Set
-			)
-		] as Set
+        query.user = new UserVO(user.id)
 		query.setPageSize(1) // Since the result is by default ordered by creation date, this gives us the newest record.
 		def results = recordService.search(query).pageItems
-		return results.isEmpty() ? null : entityManagerHandler.find(SystemRecord, results[0].id)
+		return results.isEmpty() ? null : entityManagerHandler.find(UserRecord, results[0].id)
 	}
 	
 	/**
 	 * Checks the pending eMandates to determine whether the status has changed
 	 */
 	String checkPending() {
-		def query = new SystemRecordQuery()
+		def query = new UserRecordQuery()
 		query.type = new RecordTypeVO(internalName: 'eMandate')
 		query.customValues = [
 			new CustomFieldValueForSearchDTO(
 				field: new CustomFieldVO(internalName: 'eMandate.status'),
 				enumeratedValues: [
 					new CustomFieldPossibleValueVO(internalName: 'pending')
-				]
+				] as Set
 			)
 		] as Set
 		query.setSkipTotalCount(true)
@@ -447,7 +455,7 @@ class EMandates {
 		def nowSuccess = new MutableInt()
 		def nowExpired = new MutableInt()
 		records.each {
-			def record = entityManagerHandler.find(SystemRecord.class, it.id)
+			def record = entityManagerHandler.find(UserRecord.class, it.id)
 			def toIncrement = stillPending
 			try {
 				def fields = updateStatus(record)
@@ -481,14 +489,14 @@ class EMandates {
 		Date expirationPeriodAgo = DateHelper.subtract(now, TimeField.MINUTES, expirationPeriodInMinutes)
 		Date minutesAgo = DateHelper.subtract(now, TimeField.MINUTES, lastAttemptInMinutes)
 
-		def query = new SystemRecordQuery()
+		def query = new UserRecordQuery()
 		query.type = new RecordTypeVO(internalName: 'eMandate')
 		query.customValues = [
 			new CustomFieldValueForSearchDTO(
 				field: new CustomFieldVO(internalName: 'eMandate.status'),
 				enumeratedValues: [
 					new CustomFieldPossibleValueVO(internalName: 'open')
-				]
+				] as Set
 			)
 		] as Set
 		query.datePeriod = conversionHandler.convert(DatePeriodDTO, new DatePeriod(twoWeeksAgo, expirationPeriodAgo))
@@ -501,9 +509,9 @@ class EMandates {
 		}
 		def msg = "There were ${records.size()} open eMandates newer than ${maxNrOfDays} days.\n"
 		for (item: records) {
-			def record = entityManagerHandler.find(SystemRecord.class, item.id)
+			def record = entityManagerHandler.find(UserRecord.class, item.id)
 			def fields = scriptHelper.wrap(record)
-			msg += "Checking record created at ${formatter.format(record.creationDate)} for user ${(fields.owner as User)?.username} with statusDate '${formatter.format(fields.statusDate)}'.\n"
+			msg += "Checking record created at ${formatter.format(record.creationDate)} for user ${(record.user as User)?.username} with statusDate '${formatter.format(fields.statusDate)}'.\n"
 			// Skip records for which we already got a status some minutes ago.
 			if (fields.statusDate != null && (fields.statusDate as Date).after(minutesAgo)) {
 				msg += "Skipping, because statusDate is too recent: ${formatter.format(fields.statusDate)}.\n"
@@ -525,7 +533,7 @@ class EMandates {
 	// /**
 	//  * Builds up an HTML string containing relevant details from the given emandate record.
 	//  */
-	// String emandateHtml(SystemRecord record, User user) {
+	// String emandateHtml(UserRecord record, User user) {
 	// 	if ( ! record ) {
 	// 		return ''
 	// 	}
