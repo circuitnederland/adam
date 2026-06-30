@@ -39,14 +39,14 @@ if (idCheck) {
             // Previous emandate was not succesful. Allow emandate to try again.
                 showEMandate = true
                 html = utils.dynamicMessage("entrStartMsg")
-                def vars = ['status': status]
+                def vars = ['status': emandates.retrieveTranslatedEMandateStatus(fields.status)]
                 html += "<div>${utils.dynamicMessage('entrPrevEMFailedMsg', vars)}</div>"
                 break
             case 'open':
             case 'pending':
             case 'none':
             // Previous emandate is still open/pending. Show waiting msg and don't allow new attempt.
-                def vars = ['status': status]
+                def vars = ['status': emandates.retrieveTranslatedEMandateStatus(fields.status)]
                 html = utils.dynamicMessage("entrEMWaitingMsg", vars)
                 break
             case 'success':

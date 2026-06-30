@@ -530,6 +530,14 @@ class EMandates {
 		return msg
 	}
 
+	/**
+	 * Returns the data translation of the given status value for the current language.
+	 */
+	String retrieveTranslatedEMandateStatus(RecordCustomFieldPossibleValue statusValue) {
+		def pv = QRecordCustomFieldPossibleValue.recordCustomFieldPossibleValue
+		return dataTranslationHandler.getValue(statusValue, pv.value)
+	}
+
 	// /**
 	//  * Builds up an HTML string containing relevant details from the given emandate record.
 	//  */
