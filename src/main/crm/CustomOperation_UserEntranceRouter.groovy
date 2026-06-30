@@ -11,9 +11,6 @@ Boolean showManualTransfer = false
 Boolean showEMandate = false
 String html
 
-def reloadEMandateStatus(UserRecord emandate) {
-}
-
 def idCheck = crm.getIDCheck(user)
 if (idCheck) {
     // The identity of the user has been checked. We can let them enter.
