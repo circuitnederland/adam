@@ -75,11 +75,12 @@ class CRM {
     }
 
     /**
-     * Retrieve the bankAcct record for the given user
-     * with the current iban profile field of this user.
+     * Retrieve the bankAcct record for the given user and the given iban.
      */
-    UserRecord getActiveBankAcctRecord(User user) {
-        def usr = scriptHelper.wrap(user)
+    UserRecord getBankAcctRecordForIban(User user, String iban) {
+        // The iban in the bankAcct record adheres to our iban conventions,
+        // so apply the conventions to the given iban as well before comparing.
+        def safeIBAN = new Utils(binding).ibanByConvention(iban)
         def r = QUserRecord.userRecord
         def v = QRecordCustomFieldValue.recordCustomFieldValue
         def recordType = entityManagerHandler.find(UserRecordType, 'bankAcct')
@@ -88,9 +89,18 @@ class CRM {
                 .leftJoin(v).on(v.owner().eq(r), v.field().eq(field))
                 .where(r.type().eq(recordType))
                 .where(r.user.eq(user))
-                .where(v.stringValue.eq(usr.iban))
+                .where(v.stringValue.eq(safeIBAN))
                 .fetchFirst()
         return record
+    }
+
+    /**
+     * Retrieve the bankAcct record for the given user
+     * with the current iban profile field of this user.
+     */
+    UserRecord getActiveBankAcctRecord(User user) {
+        def usr = scriptHelper.wrap(user)
+        return getBankAcctRecordForIban(usr.iban)
     }
 
     /**
@@ -103,5 +113,38 @@ class CRM {
         def bankAcctRecord = getActiveBankAcctRecord(user)
         def fields = scriptHelper.wrap(bankAcctRecord)
         return fields?.eMandate
+    }
+
+    /**
+     * Store the given emandate in a bankAcct record.
+     * Create a new bankAcct record if there is none yet for this user.
+     * If there is a bankAcct record already, link the emandate in it.
+     */
+    void storeEMandateInBankAcct(Map<String, Object> emFields) {
+        User user = emFields.user
+        def iban = emFields.iban
+        // Check if there is a bankAcct record for this user with this iban.
+        def bankAcctRecord = getBankAcctRecordForIban(user, iban)
+
+        // If there is no bankAcct record yet, create one.
+        if (!bankAcctRecord) {
+            // Create a new bankAcct record.
+            RecordDataParams params = new RecordDataParams(
+                user: new UserLocatorVO(id: user.id),
+                recordType: new RecordTypeVO(internalName: 'bankAcct')
+            )
+            UserRecordDTO record = recordService.getDataForNew(params).dto
+            def fields = scriptHelper.wrap(record)
+            fields.iban = emFields.iban
+            fields.name = emFields.accountName
+            fields.eMandate = emFields.id
+            recordService.save(record)
+        } else {
+            // Store the emandate in the existing bankAcct record.
+            def recordDTO = recordService.load(bankAcctRecord.id)
+            def fields = scriptHelper.wrap(recordDTO)
+            fields.eMandate = emFields.id
+            recordService.save(recordDTO)
+        }
     }
 }
