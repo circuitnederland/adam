@@ -241,10 +241,10 @@ class DirectDebits {
 
         // Inform the admin that a new PAIN.008 file is ready for download.
         String rootUrl = binding.sessionData.configuration.fullUrl
-        String recordUrl = "${rootUrl}/#users.records.system-search!recordTypeId=${scriptHelper.maskId(painRecord.type.id)}" +
+        String recordUrl = "${rootUrl}/admin/classic/#users.records.system-search!recordTypeId=${scriptHelper.maskId(painRecord.type.id)}" +
             "%7Cusers.records.details!id=${scriptHelper.maskId(painRecord.id)}"
         Utils utils = new Utils(binding)
-        utils.sendMailToAdmin("Nieuw incassobestand", utils.dynamicMessage("topupPAIN_008GeneratedMail", ['direct_debit_url': recordUrl]), true, true)
+        utils.sendMailToAdmin("Nieuw incassobestand", utils.dynamicMessage("ddPAIN_008ReadyMailMessage", ['direct_debit_url': recordUrl]), true, true)
 
         return "${records.size()} direct debits were processed succesfully in batch ${pain_008.batchId}."
     }

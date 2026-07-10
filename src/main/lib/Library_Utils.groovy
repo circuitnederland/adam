@@ -187,7 +187,7 @@ class Utils {
     @TypeChecked(SKIP)
     String dynamicMessage(String code, Map<String, Object> vars = null) {
         // Use the current active language of the user, if there is one.
-        String lng = binding.sessionData.loggedUser?.locale
+        String lng = binding.sessionData?.loggedUser?.locale
         if (!lng) {
             // If there is none, use the default language of the active configuration, with fallback to Dutch.
             def defaultConfLng = binding.sessionData.configuration?.defaultLanguage?.template
