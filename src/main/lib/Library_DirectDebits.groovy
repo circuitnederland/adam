@@ -79,24 +79,18 @@ class DirectDebits {
         def newStatus = curStatus
 
         switch(action) {
-            case 'cancel':
-                newStatus = 'cancelled'
-                break
             case 'fail':
-                newStatus = (curStatus == 'submitted') ? 'failed' : 'permanently_failed'
-                break
-            case 'retry':
-                newStatus = 'retry'
+                newStatus = 'failed'
                 break
             case 'settle_paid':
-                newStatus = (curStatus == 'cancelled') ? 'settled_cancelled' : 'settled_failed'
+                newStatus = 'settled'
                 fields.settlement = 'paid'
                 fields.settlement_iban = new Utils(binding).ibanByConvention(settlement.iban as String)
                 break
-            case 'settle_revoked':
-                newStatus = (curStatus == 'cancelled') ? 'settled_cancelled' : 'settled_failed'
+            case 'settle_revoke':
+                newStatus = 'settled'
                 fields.settlement = 'revoked'
-//                fields.settlement_transaction = this._revokeTopup(record.user.id, fields.transaction as Transaction)
+                fields.settlement_transaction = this._revokeReplenish(record.user.id, fields.transaction as Transaction)
                 break
         }
         fields.status = newStatus
@@ -113,19 +107,11 @@ class DirectDebits {
         def curStatus = (fields.status as CustomFieldPossibleValue).internalName
 
         switch(curStatus) {
-            case 'open':
-                return action == 'cancel'
-                break
             case 'submitted':
-            case 'resubmitted':
                 return action == 'fail'
                 break
             case 'failed':
-                return action == 'retry' || action == 'settle_paid' || action == 'settle_revoked'
-                break
-            case 'cancelled':
-            case 'permanently_failed':
-                return action == 'settle_paid' || action == 'settle_revoked'
+                return action == 'settle_paid' || action == 'settle_revoke'
                 break
         }
 
@@ -192,8 +178,34 @@ class DirectDebits {
     }
 
     /**
-     * Generates PAIN.008 data from all direct debit user records with status open or retry.
-     * The status of the included direct debit user records is then set to submitted or resubmitted.
+     * Creates a transaction from the directDebit acocunt of the given user 
+     * to the system debit account, revoking the replenish that was done earlier.
+     * The replenish has to be revoked when the accompanying direct debit (incasso) has failed.
+     */
+    private PaymentVO _revokeReplenish(Long userId, Transaction replenishTransaction){
+        PaymentTransferType type = entityManagerHandler.find(PaymentTransferType, 'directDebitAccount.revokeReplenish')
+        String description = MessageProcessingHelper.processVariables(
+            type.valueForEmptyDescription,
+            [
+                "transactionNr": replenishTransaction.transactionNumber
+            ]
+        )
+        return paymentService.perform(
+            new PerformPaymentDTO(
+                [
+                    from: new UserLocatorVO(id: userId),
+                    to: SystemAccountOwner.instance(),
+                    type: new TransferTypeVO(type.id),
+                    amount: replenishTransaction.amount,
+                    description: description
+                ]
+            )
+        )
+    }
+
+    /**
+     * Generates PAIN.008 data from all direct debit user records with status open.
+     * The status of the included direct debit user records is then set to submitted.
      * The batchId and the PAIN.008 xml are stored in a new pain_008 system record.
      */
     @TypeChecked(SKIP)
@@ -229,13 +241,13 @@ class DirectDebits {
         batchFields.nrOfTrxs = pain_008.trxs.size()
 		def painRecord = recordService.saveEntity(data.dto)
 
-        // Update the status of the records that are succesfully added to the PAIN.008 string: change status open to submitted and retry to resubmitted.
+        // Update the status of the records that are succesfully added to the PAIN.008 string: change status open to submitted.
         // Also store the batchId in the changed records.
         records.each { RecordVO recordVO ->
 			def recordDTO = recordService.load(recordVO.id)
             def record = scriptHelper.wrap(recordDTO)
             record.batchId = pain_008.batchId
-            record.status = (record.status as CustomFieldPossibleValue).internalName == 'open' ? 'submitted' : 'resubmitted'
+            record.status = 'submitted'
             recordService.save(recordDTO)
         }
 
@@ -250,7 +262,7 @@ class DirectDebits {
     }
 
     /**
-     * Returns a list of directDebit records with status open or retry. These are the records that should be 
+     * Returns a list of directDebit records with status. These are the records that should be 
      * included in the next PAIN.008 batch.
      */
     private List<RecordVO> _getDirectDebitRecords() {
@@ -260,8 +272,7 @@ class DirectDebits {
 			new CustomFieldValueForSearchDTO(
 				field: new CustomFieldVO(internalName: 'directDebit.status'),
 				enumeratedValues: [
-					new CustomFieldPossibleValueVO(internalName: 'open'),
-					new CustomFieldPossibleValueVO(internalName: 'retry')
+					new CustomFieldPossibleValueVO(internalName: 'open')
 				] as Set
 			)
 		] as Set
