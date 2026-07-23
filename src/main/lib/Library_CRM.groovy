@@ -100,7 +100,7 @@ class CRM {
      */
     UserRecord getActiveBankAcctRecord(User user) {
         def usr = scriptHelper.wrap(user)
-        return getBankAcctRecordForIban(usr.iban)
+        return getBankAcctRecordForIban(user, usr.iban)
     }
 
     /**
