@@ -3,7 +3,7 @@ import org.cyclos.entities.users.UserRecord
 import org.cyclos.impl.system.ScriptHelper
 import org.cyclos.impl.users.UserServiceLocal
 import org.cyclos.model.ValidationException
-import org.cyclos.utils.StringHelper
+import org.cyclos.server.utils.SecureRandomHelper
 
 /**
  * Extension point script to verifiy the bank account is legitimate.
@@ -40,7 +40,7 @@ if (idCheck) {
         throw new ValidationException(utils.dynamicMessage("crmWrongRef"))
     }
     // The reference is correct. Don't reuse refs, so generate a new one.
-    usr.reference = StringHelper.randomNumeric(4)
+    usr.reference = SecureRandomHelper.randomNumeric(4)
     userService.save(usrDTO)
 } else {
     // New candidate during entrance. Check the user identity by comparing 

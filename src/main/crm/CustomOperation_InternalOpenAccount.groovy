@@ -8,7 +8,7 @@ import org.cyclos.impl.users.UserServiceLocal
 import org.cyclos.model.users.groups.BasicGroupVO
 import org.cyclos.model.users.groups.ChangeGroupDTO
 import org.cyclos.model.users.users.BasicUserVO
-import org.cyclos.utils.StringHelper
+import org.cyclos.server.utils.SecureRandomHelper
 
 UserGroupServiceLocal userGroupService = binding.userGroupService
 UserServiceLocal userService = binding.userService
@@ -37,7 +37,7 @@ def usr = scriptHelper.wrap(usrDTO)
 usr.iban = ibanRecordFields?.iban
 
 // Put a random secret code in the reference profile field of the user.
-usr.reference = StringHelper.randomNumeric(4)
+usr.reference = SecureRandomHelper.randomNumeric(4)
 
 // Save the user.
 userService.save(usrDTO)
