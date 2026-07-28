@@ -18,9 +18,13 @@ if (idCheck) {
     html = utils.dynamicMessage("entrIDCheckedMsg")
 } else {
     // The identity of the user is not checked yet. See what they have done so far.
-    // Check if there is an emandate record for this user.
-    EMandates emandates = new EMandates(binding)
-    def record = emandates.newest(user)
+    def mode = binding.scriptParameters['mode']
+    def record
+    if ('EM' == mode) {
+        // Check if there is an emandate record for this user.
+        EMandates emandates = new EMandates(binding)
+        record = emandates.newest(user)
+    }
     if (record) {
         def fields = scriptHelper.wrap(record)
         // If the redirect during the emandate creation failed (indicated by an empty statusDate field), try to get the status now.
@@ -35,7 +39,7 @@ if (idCheck) {
             case 'failure':
             // Previous emandate was not succesful. Allow emandate to try again.
                 showEMandate = true
-                html = utils.dynamicMessage("entrStartMsg")
+                html = utils.dynamicMessage("entrEMStartMsg")
                 def vars = ['status': emandates.retrieveTranslatedEMandateStatus(fields.status)]
                 html += "<div>${utils.dynamicMessage('entrPrevEMFailedMsg', vars)}</div>"
                 break
@@ -53,9 +57,9 @@ if (idCheck) {
                 break
         }
     } else {
-        // No emandate record. Show the standard start message and allow emandate.
-        showEMandate = true
-        html = utils.dynamicMessage("entrStartMsg")
+        // No emandate record or non-em mode. Show the start message and allow emandate if in em mode.
+        showEMandate = ('EM' == mode)
+        html = utils.dynamicMessage("entr${mode}StartMsg")
     }
     // Always allow manual transfer, even if user has issued an emandate. So admin can ask them to identify by transfer from another iban.
     showManualTransfer = true
