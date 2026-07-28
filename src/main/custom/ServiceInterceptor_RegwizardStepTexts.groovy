@@ -1,7 +1,6 @@
 import org.cyclos.entities.users.UserGroup
 import org.cyclos.impl.system.CustomWizardServiceLocal
 import org.cyclos.impl.system.ServiceInterceptorContext
-import org.cyclos.impl.utils.conversion.ConversionHandler
 import org.cyclos.model.system.wizards.CustomWizardExecutionData
 import org.cyclos.utils.StringHelper
 
@@ -14,9 +13,13 @@ import org.cyclos.utils.StringHelper
 
 ServiceInterceptorContext context = binding.context
 CustomWizardServiceLocal customWizardService = binding.customWizardService
-ConversionHandler conversionHandler = binding.conversionHandler
 
 CustomWizardExecutionData result = context.result
+
+// On errors the result may be empty, just return in that case.
+if (!result) {
+    return
+}
 
 // Only intercept the registration wizard.
 if (result.wizard?.internalName != 'registration') {
