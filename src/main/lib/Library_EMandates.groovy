@@ -52,7 +52,7 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import groovy.transform.TypeChecked
 import net.emandates.merchant.library.AmendmentRequest
 import net.emandates.merchant.library.Configuration
-import net.emandates.merchant.library.CoreCommunicator
+import net.emandates.merchant.library.B2BCommunicator
 import net.emandates.merchant.library.NewMandateRequest
 import net.emandates.merchant.library.SequenceType
 import net.emandates.merchant.library.StatusRequest
@@ -62,7 +62,7 @@ import net.emandates.merchant.library.DirectoryResponse.DebtorBank
 @TypeChecked
 class EMandates {
 	static final String CONFIG_RESOURCE = "/emandates-config.xml"
-	static final String CORE_COMM = "emandates.coreComm"
+	static final String B2B_COMM = "emandates.b2bComm"
 	
 	Binding binding
 	ObjectMapper objectMapper
@@ -77,7 +77,7 @@ class EMandates {
 	CustomOperationFieldPossibleValueCategoryServiceLocal operationPossibleValueCategoryService
 	LinkGeneratorHandler linkGeneratorHandler
 	RecordServiceLocal recordService
-	CoreCommunicator coreComm
+	B2BCommunicator b2bComm
 	
 	EMandates(Binding binding) {
 		this.binding = binding
@@ -95,16 +95,16 @@ class EMandates {
 		recordService = vars.recordService as RecordServiceLocal
 		
 		servletContext = scriptHelper.bean(ServletContext)
-		coreComm = servletContext.getAttribute(CORE_COMM) as CoreCommunicator
-		if (!coreComm) {
+		b2bComm = servletContext.getAttribute(B2B_COMM) as B2BCommunicator
+		if (!b2bComm) {
 			def configResource = this.class.getResourceAsStream(CONFIG_RESOURCE)
 			if (!configResource) {
 				throw new IllegalStateException("Couldn't find ${CONFIG_RESOURCE} file")
 			}
 			Configuration.defaultInstance().Load(configResource)
 			
-			coreComm = new CoreCommunicator()
-			servletContext.setAttribute(CORE_COMM, coreComm)
+			b2bComm = new B2BCommunicator()
+			servletContext.setAttribute(B2B_COMM, b2bComm)
 		}
 	}
 	
@@ -140,7 +140,7 @@ class EMandates {
 	 */
 	void updateDirectory() {
 		// Call the API
-		def dir = coreComm.directory()
+		def dir = b2bComm.directory()
 		if (dir.isError) {
 			throw new IllegalStateException("Error getting eMandates directory." + 
 				"JSON response:\n" + objectMapper.writeValueAsString(dir?.errorResponse))
@@ -258,7 +258,7 @@ class EMandates {
 		)
 		
 		// Perform the request
-		def resp = coreComm.newMandate(req)
+		def resp = b2bComm.newMandate(req)
 		if (resp.isError) {
 			throw new ValidationException(
 				resp.errorResponse?.consumerMessage ?: resp.errorResponse?.errorMessage)
@@ -319,7 +319,7 @@ class EMandates {
 		)
 		
 		// Perform the request
-		def resp = coreComm.amend(req)
+		def resp = b2bComm.amend(req)
 		if (resp.isError) {
 			println(new ObjectMapper().writeValueAsString(resp))
 			throw new ValidationException(
@@ -378,7 +378,7 @@ class EMandates {
 	 */
 	StatusResponse retrieveStatus(String transactionId) {
 		StatusRequest req = new StatusRequest(transactionId)
-		StatusResponse resp = coreComm.getStatus(req)
+		StatusResponse resp = b2bComm.getStatus(req)
 		if (resp.isError) {
 			throw new ValidationException(
 				resp.errorResponse?.consumerMessage ?: resp.errorResponse?.errorMessage)
