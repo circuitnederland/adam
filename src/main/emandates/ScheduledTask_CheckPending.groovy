@@ -1,0 +1,1 @@
+new EMandates(binding).checkPending()
