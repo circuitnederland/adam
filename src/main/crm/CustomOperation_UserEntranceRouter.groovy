@@ -20,11 +20,12 @@ if (idCheck) {
     // The identity of the user is not checked yet. See what they have done so far.
     def mode = binding.scriptParameters['mode']
     def record
+    EMandates emandates
     if ('EM' == mode) {
-        // Check if there is an emandate record for this user.
-        EMandates emandates = new EMandates(binding)
+        emandates = new EMandates(binding)
         record = emandates.newest(user)
     }
+    // Check if there is an emandate record for this user.
     if (record) {
         def fields = scriptHelper.wrap(record)
         // If the redirect during the emandate creation failed (indicated by an empty statusDate field), try to get the status now.
