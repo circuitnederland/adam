@@ -43,16 +43,22 @@ if (idCheck) {
     usr.reference = SecureRandomHelper.randomNumeric(4)
     userService.save(usrDTO)
 } else {
-    // New candidate during entrance. Check the user identity by comparing 
-    // bankAcct name with the user name.
-    if (user.name == bankAcct.name) {
-        // Names are equal, create a new automatic idCheck record.
-        crm.createAutoIDCheck(user, record)
+    // New candidate during entrance. Check the user identity.
+    def autoCheck = crm.checkNames(user, bankAcct)
+    if (autoCheck) {
+        // Names are equal or similar, create a new idCheck record automatically.
+        crm.createAutoIDCheck(user, record, autoCheck)
     } else {
         // Notify the finadmin, they should check the user identity manually.
         // If the bankAcct is created during emandate, email the finadmin.
         if (bankAcct.eMandate) {
-            // @todo: send mail to finadamin to do manual ID check.
+            // Send mail to finadamin to do manual ID check.
+            utils.sendMailToAdmin("Nieuwe deelnemer ID controle vereist", 
+                utils.dynamicMessage("crmManualIDCheckRequired", 
+                ['username': user.name]), 
+                true, 
+                true
+            )
         }
         // @todo: if the finadmin is creating the bankAcct, show
         // an alert on the screen after they saved the record.
