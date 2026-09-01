@@ -98,7 +98,6 @@ class CRM {
                 return null
             }
             // Compare Cyclos name and bankAcct name with the KvK tradeNames.
-            //def source = usr.tradeNames.split(' \\| ')
             def source = usr.tradeNames.tokenize('|')*.trim()
             def names = [user.name, bankAcct.name]
             if (source.containsAll(names)) {
