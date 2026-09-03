@@ -238,9 +238,7 @@ class KvK {
         try{
             kvkResult = performRequest(usr.kvk)
         } catch(Exception e) {
-            // Send mail to techteam and return the error message.
-            def msg = "Exception during KvK api call to ${this.url}/${usr.kvk}: ${e.getMessage()}."
-            utils.sendMailToTechTeam('Error KvK API', msg, true)
+            // Return the error message.
             return e.getMessage()
         }
 
