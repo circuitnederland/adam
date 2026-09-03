@@ -350,7 +350,8 @@ class EMandates {
 		} else {
 			throw new IllegalStateException("Unhandled entranceCode: ${entranceCode}")
 		}
-		url += (url.contains('?') ? '&' : '?') + "transactionId=${transactionId}"
+		def trxId = StringHelper.removeNonAlpha(transactionId)
+		url += (url.contains('?') ? '&' : '?') + "transactionId=${trxId}"
 		def response = new ResponseInfo(HttpStatus.SEE_OTHER.value(), "")
 		response.setHeader("Location", url)
 		return response
