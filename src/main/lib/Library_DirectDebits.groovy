@@ -384,7 +384,7 @@ class PAIN_008 {
                     Cd('SEPA') // Fixed value of 'SEPA'.
                 }
                 LclInstrm() {
-                    Cd('CORE')
+                    Cd('B2B')
                 }
                 SeqTp('RCUR')
             }
