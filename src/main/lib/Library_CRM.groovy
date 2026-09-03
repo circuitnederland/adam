@@ -82,7 +82,7 @@ class CRM {
         return s
             .toLowerCase()
             .replaceAll(/[.\s]/, '')
-            .replaceAll(/bv|nv|stichting|enzonen/, '')
+            .replaceAll(binding.scriptParameters['commonNames'], '')
     }
 
     /**
