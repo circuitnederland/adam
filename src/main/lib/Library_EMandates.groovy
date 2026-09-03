@@ -321,7 +321,6 @@ class EMandates {
 		// Perform the request
 		def resp = b2bComm.amend(req)
 		if (resp.isError) {
-			println(new ObjectMapper().writeValueAsString(resp))
 			throw new ValidationException(
 				resp.errorResponse?.consumerMessage ?: resp.errorResponse?.errorMessage)
 		}
