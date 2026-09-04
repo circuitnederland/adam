@@ -1,10 +1,15 @@
 import org.cyclos.entities.users.User
 import org.cyclos.impl.system.ScriptHelper
 
-// Only show the entrance router to users that have not entered yet.
-// When we assign the entrance Product individually, users keep it after entering.
 ScriptHelper scriptHelper = binding.scriptHelper
+CRM crm = new CRM(binding)
 User user = binding.user
 
 def usr = scriptHelper.wrap(user)
-return !usr.iban
+if (crm.isCompany(user)) {
+    // Only companies that were explictly accepted may enter the network.
+    return ('accepted' == usr.admission?.internalName)
+} else {
+    // Consumers may always enter the network.
+    return true
+}
