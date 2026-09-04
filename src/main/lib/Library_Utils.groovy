@@ -171,7 +171,7 @@ class Utils {
             }
         }
         // If the field exists, return its value. Use containsKey(), because a boolean field value might be Groovy-false.
-        if ( recordData[key].containsKey(code) ) {
+        if (recordData[key]?.containsKey(code)) {
             return recordData[key][code]
         }
         // The field was not found, return either a scriptParameter with the same name, or the code itself.

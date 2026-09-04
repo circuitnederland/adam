@@ -16,7 +16,7 @@ import org.cyclos.model.users.users.UserLocatorVO
 AccountOwner user = binding.toOwner
 Transaction transaction = binding.transaction
 
-if ( ! user instanceof User ) {
+if (!(user instanceof User)) {
     // The toOwner should be a member. If it is not, something is wrong, so stop.
     return
 }

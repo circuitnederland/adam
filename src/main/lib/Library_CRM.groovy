@@ -82,7 +82,7 @@ class CRM {
         return s
             .toLowerCase()
             .replaceAll(/[.\s]/, '')
-            .replaceAll(/bv|nv|stichting|enzonen/, '')
+            .replaceAll(binding.scriptParameters['commonNames'], '')
     }
 
     /**
@@ -98,7 +98,6 @@ class CRM {
                 return null
             }
             // Compare Cyclos name and bankAcct name with the KvK tradeNames.
-            //def source = usr.tradeNames.split(' \\| ')
             def source = usr.tradeNames.tokenize('|')*.trim()
             def names = [user.name, bankAcct.name]
             if (source.containsAll(names)) {
@@ -239,9 +238,7 @@ class KvK {
         try{
             kvkResult = performRequest(usr.kvk)
         } catch(Exception e) {
-            // Send mail to techteam and return the error message.
-            def msg = "Exception during KvK api call to ${this.url}/${usr.kvk}: ${e.getMessage()}."
-            utils.sendMailToTechTeam('Error KvK API', msg, true)
+            // Return the error message.
             return e.getMessage()
         }
 
