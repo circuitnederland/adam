@@ -11,9 +11,9 @@ import org.cyclos.impl.utils.persistence.EntityManagerHandler
 ScriptHelper scriptHelper = binding.scriptHelper
 EntityManagerHandler entityManagerHandler = binding.entityManagerHandler
 User user = binding.user
-
 CRM crm = new CRM(binding)
-def records = crm.getBankAcctRecords(user)
+
+def records = (user?.id) ? crm.getBankAcctRecords(user) : []
 
 return records.collect { vo ->
     def record = entityManagerHandler.find(UserRecord.class, vo.id)
