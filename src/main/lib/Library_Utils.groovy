@@ -3,6 +3,7 @@ import static groovy.transform.TypeCheckingMode.SKIP
 import groovy.transform.TypeChecked
 import jakarta.mail.internet.InternetAddress
 import org.apache.commons.validator.routines.checkdigit.IBANCheckDigit
+import org.cyclos.entities.users.User
 import org.cyclos.entities.users.SystemRecord
 import org.cyclos.entities.users.SystemRecordType
 import org.cyclos.impl.users.RecordServiceLocal
@@ -88,6 +89,16 @@ class Utils {
      */
     Boolean isIbansEqual(String ibanA, String ibanB){
         return ibanA?.replace(" ","").equalsIgnoreCase(ibanB?.replace(" ", ""))
+    }
+
+    /**
+     * Notifies the given user of the given message via email.
+     */
+    @TypeChecked(SKIP)
+    void notifyUser(User user, String subject, String msg) {
+        def notification = binding.notificationHandler.custom(user)
+        notification.email(subject, msg)
+        notification.send()
     }
 
 	/**

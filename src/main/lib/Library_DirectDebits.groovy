@@ -150,7 +150,7 @@ class DirectDebits {
                 def balance = formatter.format(userWithBalanceVO.balance?.abs(), 2)
                 def subject = utils.dynamicMessage('ddOpenDDBalanceMailSubject')
                 def msg = utils.dynamicMessage('ddOpenDDBalanceMailMessage', ['balance': balance,'username': user.username])
-                utils.sendMail(user.name, user.email, subject, msg, true, true)
+                utils.notifyUser(user, subject, msg)
                 result += "User ${user.username} has no valid emandate, balance still ${userWithBalanceVO.balance}, mail sent to ${user.email}.\n"
             }
         }
