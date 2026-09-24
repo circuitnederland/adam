@@ -38,7 +38,8 @@ if (idCheck) {
             case 'cancelled':
             case 'expired':
             case 'failure':
-            // Previous emandate was not succesful. Allow emandate to try again.
+            // Previous emandate was not succesful. Allow emandate to try again and show manual transfer button.
+                showManualTransfer = true
                 showEMandate = true
                 html = utils.dynamicMessage("entrEMStartMsg")
                 def vars = ['status': emandates.retrieveTranslatedEMandateStatus(fields.status)]
@@ -58,12 +59,11 @@ if (idCheck) {
                 break
         }
     } else {
-        // No emandate record or non-em mode. Show the start message and allow emandate if in em mode.
+        // No emandate record or non-em mode. Show the start message and manual transfer button and allow emandate if in em mode.
+        showManualTransfer = true
         showEMandate = ('EM' == mode)
         html = utils.dynamicMessage("entr${mode}StartMsg")
     }
-    // Always allow manual transfer, even if user has issued an emandate. So admin can ask them to identify by transfer from another iban.
-    showManualTransfer = true
 }
 def actions = [
         openAccount: [
