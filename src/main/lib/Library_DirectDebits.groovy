@@ -349,7 +349,7 @@ class PAIN_008 {
     Closure document = { b ->
         b.mkp.xmlDeclaration()
         b.mkp.declareNamespace(
-            "": "urn:iso:std:iso:20022:tech:xsd:pain.008.001.02",
+            "": "urn:iso:std:iso:20022:tech:xsd:pain.008.001.08",
             "xsi": "http://www.w3.org/2001/XMLSchema-instance"
         )
         b.Document() {
@@ -401,7 +401,7 @@ class PAIN_008 {
             }
             CdtrAgt() {
                 FinInstnId() {
-                    BIC("${this.utils.techDetail('ddCreditorBIC')}")
+                    BICFI("${this.utils.techDetail('ddCreditorBIC')}")
                 }
             }
             ChrgBr('SLEV') // Fixed value of 'SLEV'.
@@ -438,7 +438,7 @@ class PAIN_008 {
             }
             DbtrAgt() {
                 FinInstnId() {
-                    BIC(trx.bic)
+                    BICFI(trx.bic)
                 }
             }
             Dbtr() {
