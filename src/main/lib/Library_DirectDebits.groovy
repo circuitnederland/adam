@@ -34,6 +34,8 @@ import org.cyclos.model.utils.DecimalRangeDTO
 import org.cyclos.model.utils.TimeField
 import org.cyclos.server.utils.DateHelper
 import org.cyclos.server.utils.MessageProcessingHelper
+import org.cyclos.server.utils.Now
+import org.cyclos.server.utils.SecureRandomHelper
 import org.cyclos.utils.Page
 
 import groovy.transform.TypeChecked
@@ -291,7 +293,7 @@ class PAIN_008 {
     private List trxs
     private BigDecimal totalAmount
     private batchId
-    private batchCreationDateTime
+    private batchDate
 
     PAIN_008(Binding binding) {
         def vars = binding.variables
@@ -307,12 +309,11 @@ class PAIN_008 {
             return ''
         }
 
-        // Generate a unique batchId, based on the current timestamp.
-        def today = new Date()
-        def date = new SimpleDateFormat("yyyyMMdd").format(today)
-        def epoch = today.getTime()
-        this.batchId = "${date}-${epoch}"
-        this.batchCreationDateTime = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss").format(today)
+        // Generate a unique batchId, based on the batch date and a string of random digits.
+        this.batchDate = Now.date()
+        def date = new SimpleDateFormat("yyyyMMdd").format(this.batchDate)
+        def randomDigits = SecureRandomHelper.randomNumeric(7)
+        this.batchId = "${date}-${randomDigits}"
 
         // Prepare the xml builder and bind the root tag to it. This will build up the xml hierarchy.
         def builder = new StreamingMarkupBuilder(useDoubleQuotes: true)
@@ -360,9 +361,10 @@ class PAIN_008 {
     }
 
     Closure groupHeader = { b ->
+        def batchCreationDateTime = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss").format(this.batchDate)
         b.GrpHdr() {
             MsgId(this.batchId)
-            CreDtTm(this.batchCreationDateTime)
+            CreDtTm(batchCreationDateTime)
             NbOfTxs(this.trxs.size())
             CtrlSum(this.totalAmount)
             InitgPty() {
@@ -372,7 +374,7 @@ class PAIN_008 {
     }
 
     Closure paymentInformation = { b ->
-        def aWeekFromNow = DateHelper.add(new Date(), TimeField.DAYS, 7)
+        def aWeekFromNow = DateHelper.add(this.batchDate, TimeField.DAYS, 7)
         def requestDate = new SimpleDateFormat("yyyy-MM-dd").format(aWeekFromNow)
         b.PmtInf() {
             PmtInfId("${this.batchId}-PID-00001")
